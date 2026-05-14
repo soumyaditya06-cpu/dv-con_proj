@@ -39,4 +39,4 @@ def find_best_object(img, detections, task, model, tokenizer, preprocess, device
 
     best_idx = torch.argmax(probs).item()
 
-    return detections[best_idx], probs
+    return detections[best_idx], probs, cropped_images[best_idx]
