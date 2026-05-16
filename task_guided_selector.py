@@ -1,8 +1,9 @@
+
 import torch
 from mobileclip import create_model_and_transforms, get_tokenizer
 
 
-def load_mobileclip(checkpoint_path="mobileclip_s1.pt"):
+def load_mobileclip(checkpoint_path="/content/dv-con_proj/mobileclip_s1.pt"):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     model, _, preprocess = create_model_and_transforms(
