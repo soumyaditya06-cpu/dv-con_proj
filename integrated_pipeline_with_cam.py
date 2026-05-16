@@ -1,9 +1,6 @@
 from ultralytics import YOLO
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
-import numpy as np
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.image import show_cam_on_image
 from task_guided_selector import load_mobileclip, find_best_object
 
 
@@ -45,39 +42,19 @@ def run_pipeline(img_path, task, yolo_conf=0.25):
     for det, score in zip(detections, scores):
         print(f"{det['class']}: {score.item():.4f}")
 
-    # Grad-CAM
-    target_layer = model.image_encoder.model.conv_exp
-
-    cam = GradCAM(
-        model=model.image_encoder,
-        target_layers=[target_layer]
-    )
-
-    input_tensor = preprocess(best_crop).unsqueeze(0).to(device)
-
-    grayscale_cam = cam(input_tensor=input_tensor)[0]
-
-    rgb_img = np.array(best_crop.resize((256, 256))).astype(np.float32) / 255.0
-
-    visualization = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
-
-    # Overlay CAM on original image
+    # Draw selected object
     x1, y1, x2, y2 = best_obj["bbox"]
 
-    cam_resized = Image.fromarray(visualization).resize((x2 - x1, y2 - y1))
-
-    original_with_cam = img.copy()
-    original_with_cam.paste(cam_resized, (x1, y1))
-
-    draw = ImageDraw.Draw(original_with_cam)
+    result_img = img.copy()
+    draw = ImageDraw.Draw(result_img)
     draw.rectangle([x1, y1, x2, y2], outline="lime", width=5)
 
     plt.figure(figsize=(8, 6))
-    plt.imshow(original_with_cam)
+    plt.imshow(result_img)
     plt.axis("off")
     plt.show()
 
-    return best_obj, scores, original_with_cam
+    return best_obj, scores, result_img
 
 
 if __name__ == "__main__":
