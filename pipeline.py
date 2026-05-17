@@ -1,77 +1,64 @@
-import torch
-from mobileclip import create_model_and_transforms, get_tokenizer
+from ultralytics import YOLO
+from PIL import Image, ImageDraw
+import matplotlib.pyplot as plt
+from task_guided_selector import load_mobileclip, find_best_object
 
-# Dictionary mapping the descriptive prompts to YOLO class priors
-TASK_PRIORS = {
-    "an object suitable to step on safely": ["chair", "bench"],
-    "an object suitable for sitting comfortably": ["chair", "couch", "bench"],
-    "an object suitable for holding flowers": ["vase", "bottle", "cup"],
-    "a tool used to remove hot food from fire": ["spoon", "fork", "tongs"],
-    "an object used to water a plant": ["bottle", "cup", "watering can"],
-    "a utensil used to remove lemon from tea": ["spoon", "fork", "cup"],
-    "a tool used for digging a hole": ["shovel", "spoon"],
-    "a tool used to open a bottle": ["bottle opener", "scissors", "knife"],
-    "a tool used to open a parcel": ["scissors", "knife"],
-    "an object used to serve wine": ["wine glass", "cup", "bottle"],
-    "an object used to pour sugar": ["cup", "bowl", "spoon"],
-    "a kitchen utensil used to spread butter": ["knife", "spoon", "scissors"],
-    "an object used to extinguish fire": ["fire extinguisher", "bottle"],
-    "an object used to beat or clean a carpet": ["stick", "bat", "chair"]
-}
 
-def load_mobileclip(checkpoint_path="/content/dv-con_proj/mobileclip_s1.pt"):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+def run_pipeline(img_path, task, yolo_conf=0.25):
+    # Load models
+    model_yolo = YOLO('yolov8n.pt')
+    model, tokenizer, preprocess, device = load_mobileclip()
 
-    model, _, preprocess = create_model_and_transforms(
-        model_name='mobileclip_s1',
-        pretrained=checkpoint_path,
-        device=device
+    # Load image
+    img = Image.open(img_path).convert("RGB")
+
+    # YOLO detection
+    results = model_yolo(img_path, conf=yolo_conf)
+
+    boxes = results[0].boxes.xyxy.cpu().numpy()
+    classes = results[0].boxes.cls.cpu().numpy()
+    names = results[0].names
+
+    detections = []
+
+    for box, cls in zip(boxes, classes):
+        detections.append({
+            "class": names[int(cls)],
+            "bbox": box.astype(int).tolist()
+        })
+
+    # MobileCLIP selection
+    best_obj, scores, best_crop = find_best_object(
+        img,
+        detections,
+        task,
+        model,
+        tokenizer,
+        preprocess,
+        device
     )
 
-    tokenizer = get_tokenizer('mobileclip_s1')
-    model.eval()
+    print("Detected object scores:")
+    for det, score in zip(detections, scores):
+        print(f"{det['class']}: {score.item():.4f}")
 
-    return model, tokenizer, preprocess, device
+    # Draw selected object
+    x1, y1, x2, y2 = best_obj["bbox"]
 
-def find_best_object(img, detections, task, model, tokenizer, preprocess, device, boost_factor=2.0):
-    if not detections:
-        return None, None, None
+    result_img = img.copy()
+    draw = ImageDraw.Draw(result_img)
+    draw.rectangle([x1, y1, x2, y2], outline="lime", width=5)
 
-    cropped_images = []
-    for det in detections:
-        x1, y1, x2, y2 = det["bbox"]
-        crop = img.crop((x1, y1, x2, y2))
-        cropped_images.append(crop)
+    plt.figure(figsize=(8, 6))
+    plt.imshow(result_img)
+    plt.axis("off")
+    plt.show()
 
-    text_tokens = tokenizer([task]).to(device)
-    image_inputs = torch.stack([preprocess(crop) for crop in cropped_images]).to(device)
+    return best_obj, scores, result_img
 
-    with torch.no_grad():
-        image_features, text_features, logit_scale = model(
-            image=image_inputs,
-            text=text_tokens
-        )
 
-        logits = logit_scale * image_features @ text_features.T
-        probs = torch.softmax(logits.squeeze(), dim=0)
+if __name__ == "__main__":
+    img_path = "/content/drive/MyDrive/coco_project/datasets/val2014/COCO_val2014_000000000139.jpg"
+    task = "a vase for flowers"
 
-    # Ensure probs is 1D (handles edge case where only 1 object is detected)
-    if probs.dim() == 0:
-        probs = probs.unsqueeze(0)
-
-    # --- APPLY PRIOR BOOST ---
-    prior_classes = TASK_PRIORS.get(task, [])
-    multipliers = torch.ones_like(probs)
-
-    for i, det in enumerate(detections):
-        if det["class"].lower() in prior_classes:
-            multipliers[i] = boost_factor
-
-    # Apply multiplier and re-normalize probabilities
-    probs = probs * multipliers
-    probs = probs / probs.sum()
-    # -------------------------
-
-    best_idx = torch.argmax(probs).item()
-
-    return detections[best_idx], probs, cropped_images[best_idx]
+    run_pipeline(img_path, task)
