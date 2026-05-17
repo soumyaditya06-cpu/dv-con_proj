@@ -32,7 +32,7 @@ TASK_PRIORS = {
     "an object used to beat or clean a carpet": ["stick", "bat", "chair"]
 }
 
-BOOST_FACTOR = 3
+BOOST_FACTOR = 5
 
 
 def load_mobileclip(checkpoint_path="/content/dv-con_proj/mobileclip_s1.pt"):
