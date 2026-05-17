@@ -71,28 +71,26 @@ def find_best_object(img, detections, task, model, tokenizer, preprocess, device
     ]).to(device)
 
     with torch.no_grad():
-
+    
         image_features, text_features, logit_scale = model(
             image=image_inputs,
             text=text_tokens
         )
-
-        logits = logit_scale * image_features @ text_features.T
-
-        probs = torch.softmax(logits.squeeze(), dim=0)
-
+    
+        logits = (logit_scale * image_features @ text_features.T).squeeze()
+    
     if task in TASK_PRIORS:
-
+    
         preferred = TASK_PRIORS[task]
-
+    
         for i, det in enumerate(detections):
-
+    
             detected_class = det["class"].lower()
-
+    
             if detected_class in preferred:
-                probs[i] *= BOOST_FACTOR
-
-        probs = probs / probs.sum()
+                logits[i] += BOOST_FACTOR
+    
+    probs = torch.softmax(logits, dim=0)
 
     best_idx = torch.argmax(probs).item()
 
