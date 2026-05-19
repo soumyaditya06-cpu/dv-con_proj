@@ -3,8 +3,8 @@
 ###  File Overview
 
 * **`task_guided_selector.py`**: Handles the core logic for selecting the most contextually appropriate object. 
-* **`[Insert File 2 Name Here]`**: Glues backend.
-* **`[Insert File 3 Name Here]`**: Sets up a basic UI.
+* **`pipeline.py`**: Glues backend.
+* **`frontend_ui.py`**: Sets up a basic UI.
 
 ###  Running the pipeline:
 
